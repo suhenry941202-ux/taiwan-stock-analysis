@@ -30,6 +30,10 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        # 同時把結果與歷史資料庫保存起來
-        git add results.json history.json
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Update daily price history and results" && git push)
+        
+        # 💡 升級防呆機制：檔案真的存在才執行 git add
+        [ -f history.json ] && git add history.json
+        [ -f results.json ] && git add results.json
+        
+        # 只有在真的有檔案被舞台（Staged）接收的情況下才提交推回
+        git diff --quiet --staged || (git commit -m "Update daily price history and results" && git push)
