@@ -3,27 +3,22 @@ import pandas as pd
 import datetime
 import json
 import os
-import yfinance as yf # 我們加入這個強大工具來補齊歷史
+import yfinance as yf
 
 HISTORY_FILE = 'history.json'
 RESULTS_FILE = 'results.json'
 
 def fetch_historical_data():
-    """自動補齊過去 15 天數據的機制"""
-    print("🔄 偵測到歷史資料庫不完整，正在啟動補齊機制...", flush=True)
-    # 我們以台積電(2330.TW)為基準來取得近期大盤走勢與均線樣本
-    ticker = yf.Ticker("2330.TW")
-    hist = ticker.history(period="1mo")
-    
+    """自動補齊機制：若歷史不足，自動抓取 2330.TW 過去 30 天數據作為大盤走勢代理"""
+    print("🔄 歷史資料不足，正在從財經庫自動補齊...", flush=True)
+    hist = yf.Ticker("2330.TW").history(period="1mo")
     data = {}
-    for date, row in hist.tail(15).iterrows():
-        date_str = date.strftime('%Y%m%d')
-        # 模擬一份完整的市場均線資料結構
-        data[date_str] = {"2330": round(row['Close'], 2)}
+    for date, row in hist.tail(20).iterrows():
+        data[date.strftime('%Y%m%d')] = {"2330": round(row['Close'], 2)}
     return data
 
 def fetch_current_market_data():
-    """抓取最新市場行情"""
+    """抓取最新市場行情 (僅限開盤日)"""
     url = "https://openapi.twse.org.tw/v1/exchangeReport/MI_INDEX"
     try:
         res = requests.get(url, timeout=15)
@@ -36,31 +31,32 @@ def fetch_current_market_data():
             if len(code) == 4 and code.isdigit():
                 try:
                     close = float(str(item.get('ClosingPrice', '0')).replace(',', ''))
+                    val = float(str(item.get('TradeValue', '0')).replace(',', ''))
+                    vol = int(float(str(item.get('TradeVolume', '0')).replace(',', '')))
                     current_prices[code] = close
+                    popular_list.append({"code": code, "name": item.get('Name', ''), "price": close, "volume": round(vol/1000), "value": round(val/100000000, 2)})
                 except: continue
-        return current_prices, [] # 省略熱門排行運算以簡化邏輯
+        popular_list.sort(key=lambda x: x['value'], reverse=True)
+        return current_prices, popular_list[:10]
     except: return {}, []
 
 def main():
     tz = datetime.timezone(datetime.timedelta(hours=8))
     now = datetime.datetime.now(tz)
     
-    # 讀取歷史
+    # 讀取現有歷史
+    history = {}
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, 'r') as f:
             try: history = json.load(f)
             except: history = {}
-    else:
-        history = {}
 
-    # 如果歷史太少，自動補齊
+    # 若歷史資料過少，觸發補齊
     if len(history) < 10:
         history = fetch_historical_data()
-        with open(HISTORY_FILE, 'w') as f:
-            json.dump(history, f)
 
     # 更新今日數據
-    current_prices, _ = fetch_current_market_data()
+    current_prices, top10 = fetch_current_market_data()
     if current_prices:
         history[now.strftime('%Y%m%d')] = current_prices
         with open(HISTORY_FILE, 'w') as f:
@@ -68,19 +64,24 @@ def main():
 
     # 運算交叉
     df = pd.DataFrame.from_dict(history, orient='index').sort_index()
-    ma5 = df.rolling(window=5).mean()
-    ma10 = df.rolling(window=10).mean()
-    
-    golden = (ma5.iloc[-2] < ma10.iloc[-2]) & (ma5.iloc[-1] > ma10.iloc[-1])
-    death = (ma5.iloc[-2] > ma10.iloc[-2]) & (ma5.iloc[-1] < ma10.iloc[-1])
-    
-    # 輸出結果
+    golden, death = [], []
+    if len(df) >= 10:
+        ma5 = df.rolling(window=5).mean()
+        ma10 = df.rolling(window=10).mean()
+        golden_s = (ma5.iloc[-2] < ma10.iloc[-2]) & (ma5.iloc[-1] > ma10.iloc[-1])
+        death_s = (ma5.iloc[-2] > ma10.iloc[-2]) & (ma5.iloc[-1] < ma10.iloc[-1])
+        golden = sorted(golden_s[golden_s].index.tolist())
+        death = sorted(death_s[death_s].index.tolist())
+
+    # 輸出最終檔案
     with open(RESULTS_FILE, 'w') as f:
         json.dump({
             "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
-            "status": f"補齊成功 (樣本: {len(history)}天)",
-            "golden": [idx for idx, val in golden.items() if val],
-            "death": [idx for idx, val in death.items() if val]
+            "data_date": max(history.keys()) if history else "無資料",
+            "status": f"補齊後運作中 (樣本: {len(history)}天)",
+            "golden": golden,
+            "death": death,
+            "top10": top10
         }, f)
 
 if __name__ == "__main__":
