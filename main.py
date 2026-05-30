@@ -8,7 +8,7 @@ HISTORY_FILE = 'history.json'
 RESULTS_FILE = 'results.json'
 
 def fetch_openapi_prices():
-    """直連證交所 OpenAPI 機房，0.5秒極速下載當日全台股行情"""
+    """直連證交所 OpenAPI 機房"""
     url = "https://openapi.twse.org.tw/v1/exchangeReport/MI_INDEX"
     print("🌐 正在連線證交所 OpenAPI 核心機房...", flush=True)
     
@@ -26,15 +26,13 @@ def fetch_openapi_prices():
         current_prices = {}
         for item in data:
             code = item.get('Code', '').strip() or item.get('證券代號', '').strip()
-            
-            # 過濾標準 4 位數台股
             if len(code) == 4 and code.isdigit():
                 close_str = item.get('ClosingPrice') or item.get('收盤價', '0')
                 close_str = str(close_str).replace(',', '').strip()
                 try:
                     current_prices[code] = float(close_str)
                 except ValueError:
-                    continue # 當天停牌或無交易則跳過
+                    continue
                     
         return current_prices
     except Exception as e:
@@ -42,7 +40,7 @@ def fetch_openapi_prices():
         return {}
 
 def main():
-    # 正確精準鎖定台北時間 (UTC+8)
+    # 🎯 第一步：不論有沒有股市資料，先精準鎖定當下的台北時間 (UTC+8)
     tz_taipei = datetime.timezone(datetime.timedelta(hours=8))
     taipei_now = datetime.datetime.now(tz_taipei)
     update_time_str = taipei_now.strftime('%Y-%m-%d %H:%M:%S')
@@ -58,14 +56,32 @@ def main():
         history = {}
         
     print(f"📁 成功載入歷史資料庫，目前已累積: {len(history)} 天的資料。", flush=True)
+    
+    # 先預設一個目前已知的最新歷史資料日期
+    data_date_str = max(history.keys()) if history else "無歷史資料"
 
     # 2. 抓取今天最新數據
     current_prices = fetch_openapi_prices()
+    
+    # 💡【關鍵修正】：如果今天是週末/假日，OpenAPI 沒有資料
     if not current_prices:
-        print("🚨 無法取得今日數據，終止本次執行。", flush=True)
-        return
+        print("🚨 無法取得今日數據（可能因週末休市或API維護）。", flush=True)
+        print(f"📝 正在將檢查時間 ({update_time_str}) 與『休市狀態』寫入網頁...", flush=True)
+        
+        # 就算沒開盤，也要更新網頁的時間跟狀態，讓使用者安心！
+        status_msg = f"週末/假日休市中 (資料庫已儲存: {len(history)}/15天)" if len(history) < 15 else "週末/假日休市中 (訊號暫不更新)"
+        
+        with open(RESULTS_FILE, 'w') as f:
+            json.dump({
+                "update_time": update_time_str,
+                "data_date": data_date_str,
+                "status": status_msg,
+                "golden": [],
+                "death": []
+            }, f)
+        return # 溫雅地結束
 
-    # 3. 智慧防重複機制：比對今天跟歷史最後一天的核心權值股股價
+    # 3. 智慧防重複機制
     today_str = taipei_now.strftime('%Y%m%d')
     if history:
         latest_date = max(history.keys())
@@ -81,16 +97,13 @@ def main():
     # 4. 如果是全新交易日，存入資料庫
     if today_str:
         history[today_str] = current_prices
-        # 只保留最近 30 天的資料，避免檔案無限膨脹
         history = dict(sorted(history.items())[-30:])
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
         print(f"✅ 成功將今日 ({today_str}) 數據寫入歷史資料庫！（當前總累積: {len(history)}/15 天）", flush=True)
+        data_date_str = today_str
 
-    # 取得目前資料庫中最新的股票開盤日期
-    data_date_str = max(history.keys()) if history else "無資料"
-
-    # 5. 檢查蓄水池進度：若不夠 15 天，也更新時間與狀態，防止網頁壞掉
+    # 5. 檢查蓄水池進度是否足夠 15 天
     if len(history) < 15:
         print(f"⏳ 蓄水池累積進度：{len(history)}/15 天。尚無法計算均線交叉。", flush=True)
         with open(RESULTS_FILE, 'w') as f:
