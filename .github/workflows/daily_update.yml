@@ -2,9 +2,11 @@ name: Daily Stock Update
 
 on:
   schedule:
-    # 每天台灣時間 18:00 (UTC 10:00) 自動執行，避開盤中時間
     - cron: '0 10 * * 1-5'
-  workflow_dispatch: # 允許你隨時手動點擊執行按鈕
+  workflow_dispatch: 
+
+permissions:
+  contents: write  # 這是關鍵：賦予寫入倉庫的權限
 
 jobs:
   build:
@@ -23,9 +25,6 @@ jobs:
           pip install twstock pandas
       
       - name: Run analysis script
-        run: |
-          python main.py
-- name: Run analysis script
         run: |
           python main.py
 
