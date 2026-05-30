@@ -2,44 +2,25 @@ import twstock
 import pandas as pd
 import json
 
-def get_ma_cross_data():
-    stocks = ['2330', '2317', '2454'] 
-    results = {"golden": [], "death": []}
+def debug_stock_data():
+    sid = '2330' # 台積電
+    stock = twstock.Stock(sid)
+    
+    # 強制往前抓 3 個月，確保數據一定有
+    data = stock.fetch_from(2026, 3) 
+    
+    print(f"--- 偵錯模式 ---")
+    print(f"抓取到 {len(data)} 筆數據")
+    
+    if len(data) > 0:
+        print(f"最新一筆數據: {data[-1]}")
+    else:
+        print("失敗：沒有抓到任何數據")
 
-    for sid in stocks:
-        stock = twstock.Stock(sid)
-        # 為了保證有足夠數據，我們改用 fetch_from 往前抓取更久
-        data = stock.fetch_from(2026, 1) 
-        
-        if len(data) < 20: 
-            print(f"股票 {sid} 資料太少，無法計算，目前僅有 {len(data)} 筆")
-            continue
-            
-        df = pd.DataFrame(data)
-        
-        # 計算移動平均線
-        df['MA5'] = df['close'].rolling(window=5).mean()
-        df['MA10'] = df['close'].rolling(window=10).mean()
-        
-        # 檢查最後幾筆計算結果是否為空 (這很常見)
-        if df['MA5'].isna().iloc[-1] or df['MA10'].isna().iloc[-1]:
-            print(f"股票 {sid} 計算結果為空")
-            continue
-
-        last = df.iloc[-1]
-        prev = df.iloc[-2]
-        
-        print(f"{sid} 最新收盤: {last['close']}, 5MA: {last['MA5']:.2f}, 10MA: {last['MA10']:.2f}")
-
-        if prev['MA5'] < prev['MA10'] and last['MA5'] > last['MA10']:
-            results["golden"].append(sid)
-        if prev['MA5'] > prev['MA10'] and last['MA5'] < last['MA10']:
-            results["death"].append(sid)
-            
+    # 模擬產生一點數據寫入 JSON，確認流程是否通暢
+    results = {"golden": ["2330(測試)"], "death": []}
     with open('results.json', 'w') as f:
         json.dump(results, f)
-    print("分析完成，資料已儲存")
+    print("已強制寫入測試數據到 results.json")
 
-get_ma_cross_data()    print("分析完成，結果已存入 results.json")
-
-get_ma_cross_data()
+debug_stock_data()
