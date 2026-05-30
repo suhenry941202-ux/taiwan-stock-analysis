@@ -1,22 +1,27 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>台股分析頁面</title>
+</head>
 <body>
-    <h1>台股交叉分析結果</h1>
-    <div id="content">載入中...</div>
+    <h1>台股均線交叉分析結果</h1>
+    <div id="content">讀取分析結果中...</div>
 
     <script>
-        // 自動讀取倉庫內的 results.json
         fetch('results.json')
             .then(response => response.json())
             .then(data => {
-                let html = "<h2>黃金交叉標的:</h2><ul>";
+                let html = "<h2>黃金交叉 (5MA 向上突破 10MA):</h2><ul>";
                 data.golden.forEach(sid => html += `<li>${sid}</li>`);
-                html += "</ul><h2>死亡交叉標的:</h2><ul>";
+                html += "</ul><h2>死亡交叉 (5MA 向下跌破 10MA):</h2><ul>";
                 data.death.forEach(sid => html += `<li>${sid}</li>`);
                 html += "</ul>";
                 document.getElementById('content').innerHTML = html;
             })
-            .catch(err => document.getElementById('content').innerHTML = "目前暫無數據");
+            .catch(() => {
+                document.getElementById('content').innerHTML = "目前暫無數據，請稍後再試。";
+            });
     </script>
 </body>
 </html>
