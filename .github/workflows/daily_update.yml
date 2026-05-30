@@ -3,11 +3,15 @@ name: Daily Stock MA Cross Analysis (OpenAPI Version)
 on:
   schedule:
     - cron: '0 10 * * 1-5' # 台北時間每週一至週五下午 6:00 自動執行
-  workflow_dispatch: # 允許你隨時手動點擊 "Run workflow" 測試
+  workflow_dispatch: # 允許手動點擊 "Run workflow"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # 💡 關鍵修正：賦予機器人將檔案推回倉庫的「寫入權限」
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repository
@@ -31,9 +35,7 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
-        # 💡 安全防呆：檢查檔案真的存在，才加入 Git 暫存區（避免週末休市沒檔案噴錯）
         [ -f history.json ] && git add history.json
         [ -f results.json ] && git add results.json
         
-        # 只有在檔案真的有變更時才執行 commit 與 push
         git diff --quiet --staged || (git commit -m "Update daily price history and results" && git push)
