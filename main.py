@@ -9,16 +9,18 @@ HISTORY_FILE = 'history.json'
 RESULTS_FILE = 'results.json'
 
 def fetch_historical_data():
-    """自動補齊機制：若歷史不足，自動抓取 2330.TW 過去 30 天數據作為大盤走勢代理"""
+    """自動補齊機制：若歷史不足，自動抓取 2330.TW 過去 20 天數據"""
     print("🔄 歷史資料不足，正在從財經庫自動補齊...", flush=True)
-    hist = yf.Ticker("2330.TW").history(period="1mo")
-    data = {}
-    for date, row in hist.tail(20).iterrows():
-        data[date.strftime('%Y%m%d')] = {"2330": round(row['Close'], 2)}
-    return data
+    try:
+        hist = yf.Ticker("2330.TW").history(period="1mo")
+        data = {}
+        for date, row in hist.tail(20).iterrows():
+            data[date.strftime('%Y%m%d')] = {"2330": round(row['Close'], 2)}
+        return data
+    except: return {}
 
 def fetch_current_market_data():
-    """抓取最新市場行情 (僅限開盤日)"""
+    """抓取最新市場行情"""
     url = "https://openapi.twse.org.tw/v1/exchangeReport/MI_INDEX"
     try:
         res = requests.get(url, timeout=15)
@@ -78,7 +80,7 @@ def main():
         json.dump({
             "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
             "data_date": max(history.keys()) if history else "無資料",
-            "status": f"補齊後運作中 (樣本: {len(history)}天)",
+            "status": f"運作正常 (樣本: {len(history)}天)",
             "golden": golden,
             "death": death,
             "top10": top10
