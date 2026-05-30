@@ -1,0 +1,27 @@
+name: Daily Stock Update
+
+on:
+  schedule:
+    # 每天台灣時間 18:00 (UTC 10:00) 自動執行，避開盤中時間
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch: # 允許你隨時手動點擊執行按鈕
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install twstock pandas
+      
+      - name: Run analysis script
+        run: |
+          python main.py
