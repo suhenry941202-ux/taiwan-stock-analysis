@@ -1,9 +1,9 @@
-name: Daily Stock MA Cross Analysis
+name: Daily Stock MA Cross Analysis (OpenAPI Version)
 
 on:
   schedule:
     - cron: '0 10 * * 1-5' # 台北時間每週一至週五下午 6:00 自動執行
-  workflow_dispatch: # 允許你手動點擊 "Run workflow"
+  workflow_dispatch: # 允許手動點擊 "Run workflow"
 
 jobs:
   build:
@@ -23,16 +23,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests pandas
 
-    - name: 🛠️ 修正雲端電腦 DNS 失憶症 (強制灌入 Google / Cloudflare DNS)
-      run: |
-        printf "nameserver 8.8.8.8\nnameserver 1.1.1.1\n" | sudo tee /etc/resolv.conf
-
     - name: Run analysis script
-      run: python main.py
+      run: python -u main.py
 
-    - name: Commit and push if results changed
+    - name: Commit and push historical data and results
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add results.json
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Update stock cross data" && git push)
+        # 同時把結果與歷史資料庫保存起來
+        git add results.json history.json
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update daily price history and results" && git push)
