@@ -2,22 +2,24 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台股分析</title>
+    <title>台股分析頁面</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 40px; background-color: #f4f7f6; }
+        .box { background: white; margin-bottom: 20px; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 8px solid #333; }
+        .golden { color: #27ae60; font-weight: bold; font-size: 1.2em; }
+        .death { color: #c0392b; font-weight: bold; font-size: 1.2em; }
+    </style>
 </head>
 <body>
     <h1>台股均線分析報告</h1>
-    <p>最後更新時間：<span id="timestamp"></span></p>
-    <div id="content">讀取中...</div>
+    <div id="content">讀取數據中...</div>
 
     <script>
-        // 加入時間戳記，確認網頁真的有更新
-        document.getElementById('timestamp').innerText = new Date().toLocaleString();
-
-        fetch('results.json?t=' + new Date().getTime()) // 加上 ?t=... 強制避開快取
+        fetch('results.json?t=' + new Date().getTime())
             .then(response => response.json())
             .then(data => {
-                let html = `<div><h3>黃金交叉:</h3><p>${data.golden.length > 0 ? data.golden.join(', ') : '目前無'}</p></div>`;
-                html += `<div><h3>死亡交叉:</h3><p>${data.death.length > 0 ? data.death.join(', ') : '目前無'}</p></div>`;
+                let html = `<div class="box"><h3>黃金交叉:</h3><p class="golden">${data.golden.length > 0 ? data.golden.join(', ') : '目前無'}</p></div>`;
+                html += `<div class="box"><h3>死亡交叉:</h3><p class="death">${data.death.length > 0 ? data.death.join(', ') : '目前無'}</p></div>`;
                 document.getElementById('content').innerHTML = html;
             });
     </script>
