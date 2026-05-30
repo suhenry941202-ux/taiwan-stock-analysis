@@ -2,40 +2,88 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>全台股均線篩選系統</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股 5MA x 10MA 均線交叉觀測站</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; padding: 40px; background-color: #f4f7f6; color: #333; }
-        h1 { text-align: center; color: #2c3e50; }
-        .box { background: white; margin-bottom: 30px; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        .box h3 { margin-top: 0; padding-bottom: 10px; border-bottom: 2px solid #eee; }
-        .golden-title { color: #27ae60; }
-        .death-title { color: #c0392b; }
-        .stock-list { display: flex; flex-wrap: wrap; gap: 10px; font-size: 1.1em; line-height: 1.8; }
-        .stock-item { background: #f8f9fa; padding: 4px 10px; border-radius: 6px; border: 1px solid #e9ecef; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 20px; color: #333; }
+        .card { background: #f8f9fa; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .box { padding: 15px; border-radius: 6px; border: 1px solid #eee; }
+        .box-golden { border-top: 5px solid #dc3545; background: #fff5f5; }
+        .box-death { border-top: 5px solid #28a745; background: #f4fbf6; }
+        h3 { margin-top: 0; }
+        ul { padding-left: 20px; max-height: 300px; overflow-y: auto; }
+        li { margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+        .status-badge { display: inline-block; padding: 3px 8px; background: #e9ecef; border-radius: 12px; font-size: 14px; margin-top: 5px; }
     </style>
 </head>
 <body>
-    <h1>全台股均線交叉篩選報告</h1>
-    <div id="content">正在動態掃描全台股數據，請稍候...</div>
+
+    <h2>📈 台股 5MA x 10MA 均線交叉觀測系統</h2>
+
+    <div class="card">
+        <div>📅 <b>最新股市資料日：</b> <span id="data-date">讀取中...</span></div>
+        <div style="margin-top: 5px;">⏰ <b>網頁最後更新時間：</b> <span id="update-time">讀取中...</span> (台北時間)</div>
+        <div>🚦 <b>系統計算狀態：</b> <span id="sys-status" class="status-badge">確認中...</span></div>
+    </div>
+
+    <div class="grid">
+        <div class="box box-golden">
+            <h3 style="color: #dc3545;">🔴 黃金交叉股 (<span id="count-golden">0</span>)</h3>
+            <ul id="list-golden"><li>載入中...</li></ul>
+        </div>
+
+        <div class="box box-death">
+            <h3 style="color: #28a745;">🟢 死亡交叉股 (<span id="count-death">0</span>)</h3>
+            <ul id="list-death"><li>載入中...</li></ul>
+        </div>
+    </div>
 
     <script>
-        fetch('results.json?t=' + new Date().getTime())
+        // 🛠️ 非同步抓取與渲染邏輯
+        fetch('results.json?t=' + new Date().getTime()) // 加上時間戳防瀏覽器快取
             .then(response => response.json())
             .then(data => {
-                let goldenItems = data.golden.length > 0 ? data.golden.map(sid => `<span class="stock-item">${sid}</span>`).join('') : '今日無訊號';
-                let deathItems = data.death.length > 0 ? data.death.map(sid => `<span class="stock-item">${sid}</span>`).join('') : '今日無訊號';
+                // 1. 渲染時間與狀態欄位
+                document.getElementById('update-time').innerText = data.update_time || '尚未更新';
+                document.getElementById('sys-status').innerText = data.status || '未知';
+                
+                if (data.data_date && data.data_date !== "無資料") {
+                    const y = data.data_date.substring(0, 4);
+                    const m = data.data_date.substring(4, 6);
+                    const d = data.data_date.substring(6, 8);
+                    document.getElementById('data-date').innerText = `${y}-${m}-${d}`;
+                } else {
+                    document.getElementById('data-date').innerText = data.data_date || '無資料';
+                }
 
-                let html = `
-                    <div class="box">
-                        <h3 class="golden-title">▲ 黃金交叉標的 (共 ${data.golden.length} 檔)：</h3>
-                        <div class="stock-list">${goldenItems}</div>
-                    </div>
-                    <div class="box">
-                        <h3 class="death-title">▼ 死亡交叉標的 (共 ${data.death.length} 檔)：</h3>
-                        <div class="stock-list">${deathItems}</div>
-                    </div>
-                `;
-                document.getElementById('content').innerHTML = html;
+                // 2. 渲染黃金交叉名單
+                const gList = document.getElementById('list-golden');
+                gList.innerHTML = '';
+                if(data.golden && data.golden.length > 0) {
+                    document.getElementById('count-golden').innerText = data.golden.length;
+                    data.golden.forEach(code => {
+                        gList.innerHTML += `<li>📈 股票代號 ${code}</li>`;
+                    });
+                } else {
+                    gList.innerHTML = '<li>暫無訊號</li>';
+                }
+
+                // 3. 渲染死亡交叉名單
+                const dList = document.getElementById('list-death');
+                dList.innerHTML = '';
+                if(data.death && data.death.length > 0) {
+                    document.getElementById('count-death').innerText = data.death.length;
+                    data.death.forEach(code => {
+                        dList.innerHTML += `<li>📉 股票代號 ${code}</li>`;
+                    });
+                } else {
+                    dList.innerHTML = '<li>暫無訊號</li>';
+                }
+            })
+            .catch(error => {
+                console.error("讀取 results.json 失敗:", error);
+                document.getElementById('sys-status').innerText = '資料讀取錯誤';
             });
     </script>
 </body>
