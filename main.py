@@ -38,6 +38,7 @@ def fetch_current_market_data():
 def main():
     tz = datetime.timezone(datetime.timedelta(hours=8))
     now = datetime.datetime.now(tz)
+    update_time_str = now.strftime('%Y-%m-%d %H:%M:%S') # 補回時間格式
     
     # 讀取歷史
     history = {}
@@ -49,18 +50,18 @@ def main():
     # 取得最新資料
     current_prices, top10 = fetch_current_market_data()
     
-    # 如果週一開盤有新資料，更新歷史
+    # 如果有新資料，更新歷史
     today_str = now.strftime('%Y%m%d')
     if current_prices:
         history[today_str] = current_prices
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
     
-    # 【關鍵突破】：只要資料大於 5 天就開始算交叉 (不需死等 15 天)
+    # 運算交叉訊號
     df = pd.DataFrame.from_dict(history, orient='index').sort_index()
     
     golden, death = [], []
-    if len(df) >= 10: # 稍微集滿一點即可計算
+    if len(df) >= 10: 
         ma5 = df.rolling(window=5).mean()
         ma10 = df.rolling(window=10).mean()
         
@@ -70,10 +71,10 @@ def main():
         golden = sorted(golden_s[golden_s].index.tolist())
         death = sorted(death_s[death_s].index.tolist())
 
-    # 寫入結果
+    # 【補全】完整寫入包含 update_time 的結果
     with open(RESULTS_FILE, 'w') as f:
         json.dump({
-            "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
+            "update_time": update_time_str, # 確保時間回來了！
             "data_date": max(history.keys()) if history else "無資料",
             "status": f"運作正常 (歷史樣本: {len(history)}天)",
             "golden": golden,
