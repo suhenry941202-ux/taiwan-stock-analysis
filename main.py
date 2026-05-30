@@ -4,8 +4,8 @@ import datetime
 import json
 
 RESULTS_FILE = 'results.json'
-# 若要增加更多股票，請在此列表新增，例如: ["2330.TW", "2317.TW", "2454.TW", ...]
-STOCK_LIST = ["2330.TW", "2317.TW", "2454.TW", "2308.TW", "2303.TW", "2881.TW"] 
+# 僅監控 0050 與 006208
+STOCK_LIST = ["0050.TW", "006208.TW"] 
 
 def main():
     tz = datetime.timezone(datetime.timedelta(hours=8))
@@ -25,9 +25,9 @@ def main():
             
             code = ticker.split('.')[0]
             if ma5_prev <= ma10_prev and ma5_curr > ma10_curr:
-                golden.append(f"股票({code})")
+                golden.append(f"ETF({code})")
             elif ma5_prev >= ma10_prev and ma5_curr < ma10_curr:
-                death.append(f"股票({code})")
+                death.append(f"ETF({code})")
             
             ticker_data.append({"code": code, "price": round(float(df['Close'].iloc[-1]), 2)})
         except: continue
@@ -37,3 +37,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
