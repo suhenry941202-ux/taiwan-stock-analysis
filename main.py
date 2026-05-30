@@ -51,7 +51,7 @@ def fetch_openapi_prices():
                     vol_int = int(float(volume_str))
                     
                     vol_lots = round(vol_int / 1000)       # 股轉為「張」
-                    val_yi = round(val_float / 100000000, 2) # 元轉為「億元']
+                    val_yi = round(val_float / 100000000, 2) # 元轉為「億元」
                     
                     popular_candidates.append({
                         "code": code,
@@ -80,8 +80,10 @@ def main():
     # 讀取現有的歷史資料庫
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, 'r') as f:
-            try: history = json.load(f)
-            except json.JSONDecodeError: history = {}
+            try: 
+                history = json.load(f)
+            except json.JSONDecodeError: 
+                history = {}
     else:
         history = {}
         
@@ -112,7 +114,7 @@ def main():
                 "status": status_msg,
                 "golden": [],
                 "death": [],
-                "top10": old_top10 # 繼承舊資料，防空檔洗白
+                "top10": old_top10 
             }, f)
         return
 
@@ -148,4 +150,38 @@ def main():
                 "status": f"資料累積中 ({len(history)}/15天)",
                 "golden": [],
                 "death": [],
-                "top10": top10
+                "top10": top10_popular
+            }, f)
+        return
+
+    # 資料集滿 15 天，啟動均線計算
+    print("📊 蓄水池已滿！正在計算全市場 5MA / 10MA 交叉訊號...", flush=True)
+    df = pd.DataFrame.from_dict(history, orient='index').sort_index(ascending=True)
+    
+    ma5 = df.rolling(window=5).mean()
+    ma10 = df.rolling(window=10).mean()
+    
+    last_ma5 = ma5.iloc[-1]
+    last_ma10 = ma10.iloc[-1]
+    prev_ma5 = ma5.iloc[-2]
+    prev_ma10 = ma10.iloc[-2]
+    
+    golden_series = (prev_ma5 < prev_ma10) & (last_ma5 > last_ma10)
+    death_series = (prev_ma5 > prev_ma10) & (last_ma5 < last_ma10)
+    
+    results = {
+        "update_time": update_time_str,
+        "data_date": data_date_str,
+        "status": "已集滿15天，訊號計算成功",
+        "golden": sorted(golden_series[golden_series].index.tolist()),
+        "death": sorted(death_series[death_series].index.tolist()),
+        "top10": top10_popular
+    }
+    
+    with open(RESULTS_FILE, 'w') as f:
+        json.dump(results, f)
+        
+    print(f"🎉 【大獲全勝】熱門標的已更新，黃金交叉：{len(results['golden'])} 檔", flush=True)
+
+if __name__ == "__main__":
+    main()
