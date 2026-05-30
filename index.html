@@ -2,100 +2,42 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>台股全方位觀測站</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 20px; color: #333; }
-        .card { background: #f8f9fa; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 20px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        body { font-family: sans-serif; max-width: 800px; margin: 30px auto; padding: 20px; }
+        .card { background: #f8f9fa; padding: 15px; border-left: 5px solid #007bff; border-radius: 4px; margin-bottom: 20px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .box { padding: 15px; border-radius: 6px; border: 1px solid #eee; }
-        .box-golden { border-top: 5px solid #dc3545; background: #fff5f5; }
-        .box-death { border-top: 5px solid #28a745; background: #f4fbf6; }
-        h3 { margin-top: 0; }
-        ul { padding-left: 20px; max-height: 300px; overflow-y: auto; }
-        li { margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+        .box { padding: 15px; border: 1px solid #ddd; border-radius: 4px; }
         a { text-decoration: none; color: #0056b3; font-weight: bold; }
-        a:hover { text-decoration: underline; color: #007bff; }
-        .status-badge { display: inline-block; padding: 3px 8px; background: #e9ecef; border-radius: 12px; font-size: 14px; margin-top: 5px; }
-        .tab-menu { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; gap: 5px; }
-        .tab-btn { padding: 10px 20px; cursor: pointer; border: 1px solid #ddd; border-bottom: none; background: #f1f3f5; border-top-left-radius: 6px; border-top-right-radius: 6px; }
-        .tab-btn.active { background: #fff; border-color: #ddd #ddd transparent #ddd; color: #007bff; font-weight: bold; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .pop-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
-        .pop-table th, .pop-table td { padding: 12px; text-align: left; border: 1px solid #eee; }
-        .pop-table th { background: #fff3e0; color: #e65100; }
+        a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-
-    <h2>📈 台股資料全自動觀測系統</h2>
-
+    <h2>📈 台股全方位觀測系統 (100-500元策略)</h2>
     <div class="card">
-        <div>📅 <b>最新股市資料日：</b> <span id="data-date">讀取中...</span></div>
-        <div>⏰ <b>網頁最後更新時間：</b> <span id="update-time">讀取中...</span></div>
-        <div>🚦 <b>系統計算狀態：</b> <span id="sys-status" class="status-badge">確認中...</span></div>
+        <div>📅 資料日期：<span id="data-date">讀取中...</span></div>
+        <div>🚦 狀態：<span id="sys-status">讀取中...</span></div>
     </div>
-
-    <div class="tab-menu">
-        <button class="tab-btn active" onclick="switchTab('ma-page')">📊 均線交叉訊號</button>
-        <button class="tab-btn" onclick="switchTab('popular-page')">🔥 前十大熱門標的</button>
+    <div class="grid">
+        <div class="box"><h3>🔴 黃金交叉 (<span id="count-g">0</span>)</h3><ul id="list-golden"></ul></div>
+        <div class="box"><h3>🟢 死亡交叉 (<span id="count-d">0</span>)</h3><ul id="list-death"></ul></div>
     </div>
-
-    <div id="ma-page" class="tab-content active">
-        <div class="grid">
-            <div class="box box-golden">
-                <h3 style="color: #dc3545;">🔴 黃金交叉股 (<span id="count-golden">0</span>)</h3>
-                <ul id="list-golden"><li>載入中...</li></ul>
-            </div>
-            <div class="box box-death">
-                <h3 style="color: #28a745;">🟢 死亡交叉股 (<span id="count-death">0</span>)</h3>
-                <ul id="list-death"><li>載入中...</li></ul>
-            </div>
-        </div>
-    </div>
-
-    <div id="popular-page" class="tab-content">
-        <table class="pop-table">
-            <thead><tr><th>排名</th><th>代號</th><th>名稱</th><th>收盤價</th><th>成交量</th><th>金額(億)</th></tr></thead>
-            <tbody id="table-popular-body"></tbody>
-        </table>
-    </div>
-
     <script>
-        function switchTab(pageId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(pageId).classList.add('active');
-            event.currentTarget.classList.add('active');
-        }
-
         fetch('results.json?t=' + new Date().getTime())
-            .then(response => response.json())
+            .then(r => r.json())
             .then(data => {
-                document.getElementById('update-time').innerText = data.update_time;
-                document.getElementById('sys-status').innerText = data.status;
                 document.getElementById('data-date').innerText = data.data_date;
-
-                const renderList = (id, countId, listData) => {
+                document.getElementById('sys-status').innerText = data.status;
+                const render = (id, countId, list) => {
                     const el = document.getElementById(id);
-                    el.innerHTML = '';
-                    document.getElementById(countId).innerText = listData.length;
-                    listData.forEach(item => {
+                    document.getElementById(countId).innerText = list.length;
+                    list.forEach(item => {
                         const code = item.match(/\((\d+)\)/)[1];
-                        const url = `https://www.wantgoo.com/stock/astock/techchart?stockno=${code}`;
-                        el.innerHTML += `<li><a href="${url}" target="_blank">${item}</a></li>`;
+                        el.innerHTML += `<li><a href="https://www.wantgoo.com/stock/astock/techchart?stockno=${code}" target="_blank">${item}</a></li>`;
                     });
-                    if(listData.length === 0) el.innerHTML = '<li>暫無訊號</li>';
                 };
-
-                renderList('list-golden', 'count-golden', data.golden);
-                renderList('list-death', 'count-death', data.death);
-
-                const pBody = document.getElementById('table-popular-body');
-                data.top10.forEach((s, i) => {
-                    pBody.innerHTML += `<tr><td>${i+1}</td><td>${s.code}</td><td>${s.name}</td><td>${s.price}</td><td>${s.volume.toLocaleString()}</td><td>${s.value}</td></tr>`;
-                });
+                render('list-golden', 'count-g', data.golden);
+                render('list-death', 'count-d', data.death);
             });
     </script>
 </body>
