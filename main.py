@@ -3,7 +3,6 @@ import pandas as pd
 import datetime
 import json
 import os
-import yfinance as yf
 
 HISTORY_FILE = 'history.json'
 RESULTS_FILE = 'results.json'
@@ -20,7 +19,6 @@ def fetch_current_market_data():
             if len(code) == 4 and code.isdigit():
                 try:
                     close = float(str(item.get('ClosingPrice', '0')).replace(',', ''))
-                    # 篩選條件：股價 100-500 元
                     if 100 <= close <= 500:
                         name = item.get('Name', '未知')
                         val = float(str(item.get('TradeValue', '0')).replace(',', ''))
@@ -49,10 +47,18 @@ def main():
         history[now.strftime('%Y%m%d')] = current_prices
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
-
-    if len(history) < 10:
+            
+    days_count = len(history)
+    
+    if days_count < 10:
         with open(RESULTS_FILE, 'w') as f:
-            json.dump({"update_time": now.strftime('%Y-%m-%d %H:%M:%S'), "data_date": "資料累積中", "status": "系統運作正常 (正在累積均線所需數據)", "golden": [], "death": [], "top10": top10}, f)
+            json.dump({
+                "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
+                "data_date": "累積中",
+                "days_count": days_count,
+                "status": f"系統運作正常 (已累積 {days_count}/10 天數據)",
+                "golden": [], "death": [], "top10": top10
+            }, f)
         return
 
     df = pd.DataFrame.from_dict(history, orient='index').sort_index()
@@ -72,7 +78,8 @@ def main():
         json.dump({
             "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
             "data_date": max(history.keys()),
-            "status": "系統運作正常 (已套用100-500元篩選)",
+            "days_count": days_count,
+            "status": "系統運作正常",
             "golden": golden,
             "death": death,
             "top10": top10
