@@ -2,24 +2,39 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台股分析頁面</title>
+    <title>全台股均線篩選系統</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; padding: 40px; background-color: #f4f7f6; }
-        .box { background: white; margin-bottom: 20px; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-left: 8px solid #333; }
-        .golden { color: #27ae60; font-weight: bold; font-size: 1.2em; }
-        .death { color: #c0392b; font-weight: bold; font-size: 1.2em; }
+        body { font-family: 'Segoe UI', sans-serif; padding: 40px; background-color: #f4f7f6; color: #333; }
+        h1 { text-align: center; color: #2c3e50; }
+        .box { background: white; margin-bottom: 30px; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .box h3 { margin-top: 0; padding-bottom: 10px; border-bottom: 2px solid #eee; }
+        .golden-title { color: #27ae60; }
+        .death-title { color: #c0392b; }
+        .stock-list { display: flex; flex-wrap: wrap; gap: 10px; font-size: 1.1em; line-height: 1.8; }
+        .stock-item { background: #f8f9fa; padding: 4px 10px; border-radius: 6px; border: 1px solid #e9ecef; }
     </style>
 </head>
 <body>
-    <h1>台股均線分析報告</h1>
-    <div id="content">讀取數據中...</div>
+    <h1>全台股均線交叉篩選報告</h1>
+    <div id="content">正在動態掃描全台股數據，請稍候...</div>
 
     <script>
         fetch('results.json?t=' + new Date().getTime())
             .then(response => response.json())
             .then(data => {
-                let html = `<div class="box"><h3>黃金交叉:</h3><p class="golden">${data.golden.length > 0 ? data.golden.join(', ') : '目前無'}</p></div>`;
-                html += `<div class="box"><h3>死亡交叉:</h3><p class="death">${data.death.length > 0 ? data.death.join(', ') : '目前無'}</p></div>`;
+                let goldenItems = data.golden.length > 0 ? data.golden.map(sid => `<span class="stock-item">${sid}</span>`).join('') : '今日無訊號';
+                let deathItems = data.death.length > 0 ? data.death.map(sid => `<span class="stock-item">${sid}</span>`).join('') : '今日無訊號';
+
+                let html = `
+                    <div class="box">
+                        <h3 class="golden-title">▲ 黃金交叉標的 (共 ${data.golden.length} 檔)：</h3>
+                        <div class="stock-list">${goldenItems}</div>
+                    </div>
+                    <div class="box">
+                        <h3 class="death-title">▼ 死亡交叉標的 (共 ${data.death.length} 檔)：</h3>
+                        <div class="stock-list">${deathItems}</div>
+                    </div>
+                `;
                 document.getElementById('content').innerHTML = html;
             });
     </script>
