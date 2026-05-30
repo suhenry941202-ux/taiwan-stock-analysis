@@ -8,7 +8,7 @@ HISTORY_FILE = 'history.json'
 RESULTS_FILE = 'results.json'
 
 def fetch_openapi_prices():
-    """直連證交所 OpenAPI 機房"""
+    """直連證交所 OpenAPI 機房，同時抓取收盤價與熱門度數據"""
     url = "https://openapi.twse.org.tw/v1/exchangeReport/MI_INDEX"
     print("🌐 正在連線證交所 OpenAPI 核心機房...", flush=True)
     
@@ -30,6 +30,7 @@ def fetch_openapi_prices():
             code = item.get('Code', '').strip() or item.get('證券代號', '').strip()
             name = item.get('Name', '').strip() or item.get('證券名稱', '').strip()
             
+            # 過濾標準 4 位數台股
             if len(code) == 4 and code.isdigit():
                 close_str = item.get('ClosingPrice') or item.get('收盤價', '0')
                 close_str = str(close_str).replace(',', '').strip()
@@ -41,14 +42,16 @@ def fetch_openapi_prices():
                 volume_str = str(volume_str).replace(',', '').strip()
                 
                 try:
+                    # 1. 均線專用收盤價
                     close_val = float(close_str)
                     current_prices[code] = close_val
                     
+                    # 2. 熱門度專用數據（成交金額與成交量）
                     val_float = float(value_str)
                     vol_int = int(float(volume_str))
                     
-                    vol_lots = round(vol_int / 1000)
-                    val_yi = round(val_float / 100000000, 2)
+                    vol_lots = round(vol_int / 1000)       # 股轉為「張」
+                    val_yi = round(val_float / 100000000, 2) # 元轉為「億元']
                     
                     popular_candidates.append({
                         "code": code,
@@ -58,8 +61,9 @@ def fetch_openapi_prices():
                         "value": val_yi
                     })
                 except ValueError:
-                    continue
+                    continue # 當天停牌或無交易則跳過
                     
+        # 依成交金額（億元）由大到小排序，取前 10 名
         popular_candidates.sort(key=lambda x: x['value'], reverse=True)
         top10_popular = popular_candidates[:10]
         
@@ -73,6 +77,7 @@ def main():
     taipei_now = datetime.datetime.now(tz_taipei)
     update_time_str = taipei_now.strftime('%Y-%m-%d %H:%M:%S')
 
+    # 讀取現有的歷史資料庫
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, 'r') as f:
             try: history = json.load(f)
@@ -80,9 +85,10 @@ def main():
     else:
         history = {}
         
+    print(f"📁 成功載入歷史資料庫，目前已累積: {len(history)} 天的資料。", flush=True)
     data_date_str = max(history.keys()) if history else "無歷史資料"
 
-    # 讀取舊的結果
+    # 讀取舊的結果，用來在週末時留存熱門股榜單不被洗掉
     old_top10 = []
     if os.path.exists(RESULTS_FILE):
         with open(RESULTS_FILE, 'r') as f:
@@ -92,30 +98,13 @@ def main():
             except:
                 pass
 
+    # 抓取最新數據
     current_prices, top10_popular = fetch_openapi_prices()
     
-    # 💡【核心修正】：如果週末沒資料，且過去沒有歷史熱門資料，直接灌入本週五(5/29)官方真實數據種子
+    # 如果是週末/假日沒資料
     if not current_prices:
-        print("🚨 無法取得今日數據（週末休市）。", flush=True)
-        
-        if not old_top10:
-            print("💡 偵測到系統首次運行且適逢週末，自動載入 5/29（五）台股真實熱門榜單種子！", flush=True)
-            old_top10 = [
-                {"code": "2330", "name": "台積電", "price": 852.0, "volume": 35420, "value": 301.78},
-                {"code": "2317", "name": "鴻海", "price": 176.5, "volume": 68150, "value": 120.28},
-                {"code": "2382", "name": "廣達", "price": 284.0, "volume": 28410, "value": 80.68},
-                {"code": "2454", "name": "聯發科", "price": 1195.0, "volume": 4820, "value": 57.6},
-                {"code": "3017", "name": "奇鋐", "price": 605.0, "volume": 8120, "value": 49.13},
-                {"code": "3231", "name": "緯創", "price": 114.5, "volume": 41250, "value": 47.23},
-                {"code": "2603", "name": "長榮", "price": 201.5, "volume": 21800, "value": 43.93},
-                {"code": "2308", "name": "台達電", "price": 338.5, "volume": 12100, "value": 40.96},
-                {"code": "3037", "name": "欣興", "price": 179.5, "volume": 20300, "value": 36.44},
-                {"code": "2345", "name": "智邦", "price": 548.0, "volume": 6200, "value": 33.98}
-            ]
-            if data_date_str == "無歷史資料":
-                data_date_str = "20260529"
-        
-        status_msg = f"週末休市 (已載入本週最新熱門資料)"
+        print("🚨 無法取得今日數據（週末或休市）。將保留上一次的熱門榜單。", flush=True)
+        status_msg = f"週末/假日休市中 (資料庫已儲存: {len(history)}/15天)" if len(history) < 15 else "週末/假日休市中 (訊號暫不更新)"
         with open(RESULTS_FILE, 'w') as f:
             json.dump({
                 "update_time": update_time_str,
@@ -123,9 +112,8 @@ def main():
                 "status": status_msg,
                 "golden": [],
                 "death": [],
-                "top10": old_top10
+                "top10": old_top10 # 繼承舊資料，防空檔洗白
             }, f)
-        print("📝 成功將真數據種子寫入網頁！", flush=True)
         return
 
     # 智慧防重複機制
@@ -138,16 +126,21 @@ def main():
                 is_duplicate = False
                 break
         if is_duplicate:
+            print(f"🛑 偵測到今日資料與歷史最新一天 ({latest_date}) 完全相同。休市日跳過更新！", flush=True)
             today_str = None
 
+    # 全新交易日寫入資料庫
     if today_str:
         history[today_str] = current_prices
         history = dict(sorted(history.items())[-30:])
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
+        print(f"✅ 成功將今日 ({today_str}) 數據寫入歷史資料庫！", flush=True)
         data_date_str = today_str
 
+    # 檢查蓄水池進度
     if len(history) < 15:
+        print(f"⏳ 蓄水池累積進度：{len(history)}/15 天。", flush=True)
         with open(RESULTS_FILE, 'w') as f:
             json.dump({
                 "update_time": update_time_str,
@@ -155,33 +148,4 @@ def main():
                 "status": f"資料累積中 ({len(history)}/15天)",
                 "golden": [],
                 "death": [],
-                "top10": top10_popular
-            }, f)
-        return
-
-    df = pd.DataFrame.from_dict(history, orient='index').sort_index(ascending=True)
-    ma5 = df.rolling(window=5).mean()
-    ma10 = df.rolling(window=10).mean()
-    
-    last_ma5 = ma5.iloc[-1]
-    last_ma10 = ma10.iloc[-1]
-    prev_ma5 = ma5.iloc[-2]
-    prev_ma10 = ma10.iloc[-2]
-    
-    golden_series = (prev_ma5 < prev_ma10) & (last_ma5 > last_ma10)
-    death_series = (prev_ma5 > prev_ma10) & (last_ma5 < last_ma10)
-    
-    results = {
-        "update_time": update_time_str,
-        "data_date": data_date_str,
-        "status": "已集滿15天，訊號計算成功",
-        "golden": sorted(golden_series[golden_series].index.tolist()),
-        "death": sorted(death_series[death_series].index.tolist()),
-        "top10": top10_popular
-    }
-    
-    with open(RESULTS_FILE, 'w') as f:
-        json.dump(results, f)
-
-if __name__ == "__main__":
-    main()
+                "top10": top10
