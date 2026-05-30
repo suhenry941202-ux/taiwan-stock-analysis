@@ -19,23 +19,24 @@ def fetch_current_market_data():
             code = item.get('Code', '').strip()
             if len(code) == 4 and code.isdigit():
                 try:
-                    name = item.get('Name', '未知')
                     close = float(str(item.get('ClosingPrice', '0')).replace(',', ''))
-                    val = float(str(item.get('TradeValue', '0')).replace(',', ''))
-                    vol = float(str(item.get('TradeVolume', '0')).replace(',', ''))
-                    current_prices[code] = close
-                    name_map[code] = name
-                    popular_list.append({"code": code, "name": name, "price": close, "volume": vol, "value": round(val/100000000, 2)})
+                    # 篩選條件：股價 100-500 元
+                    if 100 <= close <= 500:
+                        name = item.get('Name', '未知')
+                        val = float(str(item.get('TradeValue', '0')).replace(',', ''))
+                        vol = float(str(item.get('TradeVolume', '0')).replace(',', ''))
+                        current_prices[code] = close
+                        name_map[code] = name
+                        popular_list.append({"code": code, "name": name, "price": close, "volume": vol, "value": round(val/100000000, 2)})
                 except: continue
         popular_list.sort(key=lambda x: x['value'], reverse=True)
-        return current_prices, name_map, popular_list[:10]
+        return current_prices, name_map, popular_list[:50]
     except: return {}, {}, []
 
 def main():
     tz = datetime.timezone(datetime.timedelta(hours=8))
     now = datetime.datetime.now(tz)
     
-    # 讀取歷史與容錯處理
     history = {}
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, 'r') as f:
@@ -48,14 +49,12 @@ def main():
         history[now.strftime('%Y%m%d')] = current_prices
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
-            
-    # 安全檢查：若資料不足 10 天，無法計算均線
+
     if len(history) < 10:
         with open(RESULTS_FILE, 'w') as f:
-            json.dump({"update_time": now.strftime('%Y-%m-%d %H:%M:%S'), "data_date": "資料累積中", "status": "正在累積歷史數據，請稍候...", "golden": [], "death": [], "top10": top10}, f)
+            json.dump({"update_time": now.strftime('%Y-%m-%d %H:%M:%S'), "data_date": "資料累積中", "status": "系統運作正常 (正在累積均線所需數據)", "golden": [], "death": [], "top10": top10}, f)
         return
 
-    # 運算邏輯
     df = pd.DataFrame.from_dict(history, orient='index').sort_index()
     df = df.apply(pd.to_numeric, errors='coerce').ffill().bfill()
     ma5 = df.rolling(window=5).mean()
@@ -73,7 +72,7 @@ def main():
         json.dump({
             "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
             "data_date": max(history.keys()),
-            "status": "系統運作正常",
+            "status": "系統運作正常 (已套用100-500元篩選)",
             "golden": golden,
             "death": death,
             "top10": top10
