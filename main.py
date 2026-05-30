@@ -9,14 +9,22 @@ HISTORY_FILE = 'history.json'
 RESULTS_FILE = 'results.json'
 
 def fetch_historical_data():
-    """使用 yfinance 補齊 2330 歷史數據作為基準"""
-    try:
-        hist = yf.Ticker("2330.TW").history(period="1mo")
-        data = {}
-        for date, row in hist.tail(20).iterrows():
-            data[date.strftime('%Y%m%d')] = {"2330": round(row['Close'], 2)}
-        return data
-    except: return {}
+    """全市場核心權值股補齊 (擴展監控清單)"""
+    print("🔄 正在執行全市場歷史數據回補...", flush=True)
+    # 你可以隨時在這裡增加更多代碼，例如 "2303.TW", "2382.TW"
+    targets = ["2330.TW", "2317.TW", "2454.TW", "2308.TW", "2881.TW", "2303.TW", "2382.TW", "2412.TW", "2882.TW", "2002.TW"]
+    combined_data = {}
+    
+    for ticker_symbol in targets:
+        try:
+            hist = yf.Ticker(ticker_symbol).history(period="1mo")
+            code = ticker_symbol.replace(".TW", "")
+            for date, row in hist.tail(20).iterrows():
+                date_str = date.strftime('%Y%m%d')
+                if date_str not in combined_data: combined_data[date_str] = {}
+                combined_data[date_str][code] = round(row['Close'], 2)
+        except: continue
+    return combined_data
 
 def fetch_current_market_data():
     """抓取證交所最新盤後行情"""
@@ -44,7 +52,6 @@ def main():
     tz = datetime.timezone(datetime.timedelta(hours=8))
     now = datetime.datetime.now(tz)
     
-    # 讀取並合併數據
     history = {}
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, 'r') as f:
@@ -60,32 +67,25 @@ def main():
         with open(HISTORY_FILE, 'w') as f:
             json.dump(history, f)
 
-    # 【核心升級】使用 DataFrame 進行精確交叉計算
     df = pd.DataFrame.from_dict(history, orient='index').sort_index()
-    # 將所有非數值轉為 NaN
-    df = df.apply(pd.to_numeric, errors='coerce').fillna(method='ffill')
+    df = df.apply(pd.to_numeric, errors='coerce').ffill().bfill()
     
     ma5 = df.rolling(window=5).mean()
     ma10 = df.rolling(window=10).mean()
     
-    # 交叉邏輯：MA5 從下往上穿過 MA10
-    # 增加一個極微小的 tolerance，避免浮點數誤差導致漏判
-    tolerance = 0.0001
-    golden_s = (ma5.shift(1) <= ma10.shift(1) + tolerance) & (ma5 > ma10)
-    death_s = (ma5.shift(1) >= ma10.shift(1) - tolerance) & (ma5 < ma10)
+    golden_list, death_list = [], []
+    for col in df.columns:
+        if col not in ma5.columns: continue
+        is_golden = (ma5[col].shift(1) <= ma10[col].shift(1) + 0.01) & (ma5[col] > ma10[col])
+        is_death = (ma5[col].shift(1) >= ma10[col].shift(1) - 0.01) & (ma5[col] < ma10[col])
+        if is_golden.iloc[-1]: golden_list.append(col)
+        if is_death.iloc[-1]: death_list.append(col)
     
-    # 只取最後一天的訊號
-    last_golden = golden_s.iloc[-1]
-    last_death = death_s.iloc[-1]
-    
-    golden_list = last_golden[last_golden].index.tolist()
-    death_list = last_death[last_death].index.tolist()
-
     with open(RESULTS_FILE, 'w') as f:
         json.dump({
             "update_time": now.strftime('%Y-%m-%d %H:%M:%S'),
             "data_date": max(history.keys()),
-            "status": "工業級偵測模式運作中",
+            "status": "全市場掃描運作中",
             "golden": golden_list,
             "death": death_list,
             "top10": top10
