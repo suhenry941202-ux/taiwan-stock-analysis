@@ -1,4 +1,14 @@
-steps:
+name: Update Stock Data
+
+on:
+  schedule:
+    - cron: '0 10 * * 1-5' # 預設週一至週五 18:00 (UTC+8) 執行
+  workflow_dispatch:        # 允許你手動觸發
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -13,10 +23,10 @@ steps:
       - name: Run main script
         run: python main.py
 
-      - name: Commit results
+      - name: Commit and push changes
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
           git add history.json results.json
-          git commit -m "Auto-update stock data"
-          git push
+          # 檢查是否有變更，若無變更則不執行 commit，避免錯誤
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update stock data" && git push)
