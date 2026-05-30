@@ -2,99 +2,102 @@ import requests
 import pandas as pd
 import datetime
 import json
-import time
+import os
 
-def extract_twse_prices(json_data):
-    """解析證交所回傳的 JSON，自動相容新舊版格式並抽出所有股票收盤價"""
-    rows, fields = [], []
+HISTORY_FILE = 'history.json'
+RESULTS_FILE = 'results.json'
+
+def fetch_openapi_prices():
+    """直連證交所 OpenAPI 機房，0.5秒極速下載當日全台股行情"""
+    url = "https://openapi.twse.org.tw/v1/exchangeReport/MI_INDEX"
+    print("🌐 正在連線證交所 OpenAPI 核心機房...", flush=True)
     
-    if 'fields9' in json_data and 'data9' in json_data:
-        fields = json_data['fields9']
-        rows = json_data['data9']
-    elif 'tables' in json_data:
-        for table in json_data['tables']:
-            if '每日收盤行情' in table.get('title', ''):
-                fields = table.get('fields', [])
-                rows = table.get('data', [])
-                break
-                
-    if not fields or not rows:
-        return {}
-        
     try:
-        code_idx = fields.index('證券代號')
-        close_idx = fields.index('收盤價')
-    except ValueError:
+        res = requests.get(url, timeout=10)
+        if res.status_code != 200:
+            print(f"❌ OpenAPI 伺服器回傳錯誤代碼: {res.status_code}", flush=True)
+            return {}
+        
+        data = res.json()
+        if not isinstance(data, list):
+            print("❌ 回傳格式異常，預期應為陣列資料。", flush=True)
+            return {}
+            
+        current_prices = {}
+        for item in data:
+            # OpenAPI 的欄位名稱通常為英文：Code (代號), ClosingPrice (收盤價)
+            code = item.get('Code', '').strip()
+            # 相容部分中文欄位狀況
+            if not code:
+                code = item.get('證券代號', '').strip()
+                
+            if len(code) == 4 and code.isdigit():
+                close_str = item.get('ClosingPrice') or item.get('收盤價', '0')
+                close_str = str(close_str).replace(',', '').strip()
+                try:
+                    current_prices[code] = float(close_str)
+                except ValueError:
+                    continue # 停牌或無交易則跳過
+                    
+        return current_prices
+    except Exception as e:
+        print(f"❌ 連線 OpenAPI 發生非預期錯誤: {e}", flush=True)
         return {}
-        
-    day_prices = {}
-    for r in rows:
-        code = r[code_idx].strip()
-        # 只要標準的 4 位數台股（排除權證、ETF等）
-        if len(code) == 4 and code.isdigit():
-            close_str = r[close_idx].replace(',', '').strip()
+
+def main():
+    # 1. 讀取現有的歷史資料庫
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, 'r') as f:
             try:
-                day_prices[code] = float(close_str)
-            except ValueError:
-                # 當天停牌或無交易則跳過
-                continue
-    return day_prices
-
-def get_ma_cross_data():
-    print("🚀 啟動證交所官方直連對接系統（抗斷線重裝版）...")
-    
-    trading_days_data = {}
-    today = datetime.date.today()
-    
-    collected_count = 0
-    lookback_days = 0
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
-    # 最多倒退搜尋 40 天，直到集滿 15 個真實開盤交易日
-    while collected_count < 15 and lookback_days < 40:
-        target_date = today - datetime.timedelta(days=lookback_days)
-        date_str = target_date.strftime('%Y%m%d')
-        lookback_days += 1
+                history = json.load(f)
+            except json.JSONDecodeError:
+                history = {}
+    else:
+        history = {}
         
-        url = f"https://www.twse.org.tw/exchangeReport/MI_INDEX?response=json&date={date_str}&type=ALLBUT0999"
-        
-        # 單日最多重試 3 次
-        for attempt in range(1, 4):
-            try:
-                res = requests.get(url, headers=headers, timeout=15)
-                
-                if res.status_code != 200:
-                    break
-                    
-                data = res.json()
-                if data.get('stat') != 'OK':
-                    break # 當天休市，直接跳出換下一天
-                    
-                day_prices = extract_twse_prices(data)
-                if day_prices:
-                    trading_days_data[date_str] = day_prices
-                    collected_count += 1
-                    print(f"✅ 成功下載官方 {date_str} 行情表（已集齊 {collected_count}/15 天）")
-                
-                time.sleep(2.0) # 保持好公民禮貌
-                break # 成功了，跳出重試迴圈
-                
-            except Exception as e:
-                print(f"⚠️ 讀取 {date_str} 失敗 (第 {attempt}/3 次嘗試)... 原因: {e}")
-                if attempt < 3:
-                    print("⏳ 觸發防禦機制：靜止 5 秒後重新撥號...")
-                    time.sleep(5)
-                else:
-                    print(f"❌ 已連續失敗 3 次，跳過 {date_str}。")
+    print(f"📁 成功載入歷史資料庫，目前已累積: {len(history)} 天的資料。", flush=True)
 
-    if len(trading_days_data) < 15:
-        raise RuntimeError(f"🚨 歷史交易日收集不足！只收集到 {len(trading_days_data)} 天，無法計算均線。")
+    # 2. 抓取今天最新數據
+    current_prices = fetch_openapi_prices()
+    if not current_prices:
+        print("🚨 無法取得今日數據，終止本次執行。", flush=True)
+        return
 
-    print("📊 正在利用大數據矩陣計算全市場均線...")
-    df = pd.DataFrame.from_dict(trading_days_data, orient='index').sort_index(ascending=True)
+    # 3. 智慧防重複機制：比對今天跟歷史最後一天的台積電(2330)與鴻海(2317)股價
+    # 如果完全一樣，代表今天可能是週末/假日，證交所還沒更新資料
+    today_str = datetime.date.today().strftime('%Y%m%d')
+    if history:
+        latest_date = max(history.keys())
+        is_duplicate = True
+        for check_code in ['2330', '2317', '2454']:
+            if current_prices.get(check_code) != history[latest_date].get(check_code):
+                is_duplicate = False
+                break
+        if is_duplicate:
+            print(f"🛑 偵測到今日資料與歷史最新一天 ({latest_date}) 完全相同。今天應為休市日，跳過更新！", flush=True)
+            today_str = None
+
+    # 4. 如果是全新交易日，存入儲蓄豬
+    if today_str:
+        history[today_str] = current_prices
+        # 只保留最近 30 天的資料，避免檔案無限膨脹
+        history = dict(sorted(history.items())[-30:])
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(history, f)
+        print(f"✅ 成功將今日 ({today_str}) 數據寫入歷史資料庫！（當前總累積: {len(history)}/15 天）", flush=True)
+
+    # 5. 檢查蓄水池進度：夠不夠 15 天計算均線？
+    if len(history) < 15:
+        print(f"⏳ 蓄水池累積進度：{len(history)}/15 天。資料量還不夠計算 5MA/10MA 黃金交叉，請讓它每天自動跑，集滿後訊號就會誕生！", flush=True)
+        # 先建立一個空的結果檔案防止噴錯
+        if not os.path.exists(RESULTS_FILE):
+            with open(RESULTS_FILE, 'w') as f:
+                json.dump({"golden": [], "death": []}, f)
+        return
+
+    # 6. 資料集滿，啟動矩陣計算
+    print("📊 蓄水池已滿！正在計算全市場 5MA / 10MA 交叉訊號...", flush=True)
+    df = pd.DataFrame.from_dict(history, orient='index').sort_index(ascending=True)
     
     ma5 = df.rolling(window=5).mean()
     ma10 = df.rolling(window=10).mean()
@@ -112,10 +115,10 @@ def get_ma_cross_data():
         "death": sorted(death_series[death_series].index.tolist())
     }
     
-    with open('results.json', 'w') as f:
+    with open(RESULTS_FILE, 'w') as f:
         json.dump(results, f)
         
-    print(f"🎉 【史詩級成功】已成功對接證交所！上市黃金交叉：{len(results['golden'])} 檔，死亡交叉：{len(results['death'])} 檔")
+    print(f"🎉 【大獲全勝】黃金交叉：{len(results['golden'])} 檔，死亡交叉：{len(results['death'])} 檔", flush=True)
 
 if __name__ == "__main__":
-    get_ma_cross_data()
+    main()
