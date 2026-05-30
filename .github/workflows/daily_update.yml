@@ -6,7 +6,7 @@ on:
   workflow_dispatch: 
 
 permissions:
-  contents: write  # 這是關鍵：賦予寫入倉庫的權限
+  contents: write
 
 jobs:
   build:
@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install twstock pandas
+          pip install yfinance pandas
       
       - name: Run analysis script
         run: |
