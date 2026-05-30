@@ -5,8 +5,9 @@ import json
 import time
 
 def extract_twse_prices(json_data):
-    """解析證交所回傳的 JSON"""
+    """解析證交所回傳的 JSON，自動相容新舊版格式並抽出所有股票收盤價"""
     rows, fields = [], []
+    
     if 'fields9' in json_data and 'data9' in json_data:
         fields = json_data['fields9']
         rows = json_data['data9']
@@ -29,16 +30,18 @@ def extract_twse_prices(json_data):
     day_prices = {}
     for r in rows:
         code = r[code_idx].strip()
+        # 只要標準的 4 位數台股（排除權證、ETF等）
         if len(code) == 4 and code.isdigit():
             close_str = r[close_idx].replace(',', '').strip()
             try:
                 day_prices[code] = float(close_str)
             except ValueError:
+                # 當天停牌或無交易則跳過
                 continue
     return day_prices
 
 def get_ma_cross_data():
-    print("🚀 啟動證交所官方直連對接系統（已載入高容錯抗斷線機制）...")
+    print("🚀 啟動證交所官方直連對接系統（抗斷線重裝版）...")
     
     trading_days_data = {}
     today = datetime.date.today()
@@ -50,6 +53,7 @@ def get_ma_cross_data():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
+    # 最多倒退搜尋 40 天，直到集滿 15 個真實開盤交易日
     while collected_count < 15 and lookback_days < 40:
         target_date = today - datetime.timedelta(days=lookback_days)
         date_str = target_date.strftime('%Y%m%d')
@@ -57,17 +61,17 @@ def get_ma_cross_data():
         
         url = f"https://www.twse.org.tw/exchangeReport/MI_INDEX?response=json&date={date_str}&type=ALLBUT0999"
         
-        # 💡【核心防線】加入單日最多重試 3 次的迴圈
+        # 單日最多重試 3 次
         for attempt in range(1, 4):
             try:
                 res = requests.get(url, headers=headers, timeout=15)
                 
                 if res.status_code != 200:
-                    break # 非 200 可能是網址不對或伺服器拒絕，直接跳出重試
+                    break
                     
                 data = res.json()
                 if data.get('stat') != 'OK':
-                    break # 當天休市，不需重試，直接跳出
+                    break # 當天休市，直接跳出換下一天
                     
                 day_prices = extract_twse_prices(data)
                 if day_prices:
@@ -76,16 +80,15 @@ def get_ma_cross_data():
                     print(f"✅ 成功下載官方 {date_str} 行情表（已集齊 {collected_count}/15 天）")
                 
                 time.sleep(2.0) # 保持好公民禮貌
-                break # 💡 成功了，立刻衝出重試迴圈，繼續下一天！
+                break # 成功了，跳出重試迴圈
                 
             except Exception as e:
-                # 💡 抓到 DNS 錯誤或網路斷線
                 print(f"⚠️ 讀取 {date_str} 失敗 (第 {attempt}/3 次嘗試)... 原因: {e}")
                 if attempt < 3:
-                    print("⏳ 雲端網路可能瞬斷，靜止 5 秒後重新挑戰...")
-                    time.sleep(5) # 休息久一點再試
+                    print("⏳ 觸發防禦機制：靜止 5 秒後重新撥號...")
+                    time.sleep(5)
                 else:
-                    print(f"❌ 已連續失敗 3 次，徹底放棄 {date_str} 換下一天。")
+                    print(f"❌ 已連續失敗 3 次，跳過 {date_str}。")
 
     if len(trading_days_data) < 15:
         raise RuntimeError(f"🚨 歷史交易日收集不足！只收集到 {len(trading_days_data)} 天，無法計算均線。")
