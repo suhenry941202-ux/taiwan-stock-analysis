@@ -2,21 +2,24 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台股分析頁面</title>
+    <title>台股均線分析</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .box { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+        .golden { color: green; font-weight: bold; }
+        .death { color: red; font-weight: bold; }
+    </style>
 </head>
 <body>
-    <h1>台股均線交叉分析結果</h1>
-    <div id="content">讀取分析結果中...</div>
+    <h1>台股均線交叉分析報告</h1>
+    <div id="content">正在更新數據，請稍候...</div>
 
     <script>
         fetch('results.json')
             .then(response => response.json())
             .then(data => {
-                let html = "<h2>黃金交叉 (5MA 向上突破 10MA):</h2><ul>";
-                data.golden.forEach(sid => html += `<li>${sid}</li>`);
-                html += "</ul><h2>死亡交叉 (5MA 向下跌破 10MA):</h2><ul>";
-                data.death.forEach(sid => html += `<li>${sid}</li>`);
-                html += "</ul>";
+                let html = `<div class="box"><h3>黃金交叉標的:</h3><p class="golden">${data.golden.length > 0 ? data.golden.join(', ') : '目前無'}</p></div>`;
+                html += `<div class="box"><h3>死亡交叉標的:</h3><p class="death">${data.death.length > 0 ? data.death.join(', ') : '目前無'}</p></div>`;
                 document.getElementById('content').innerHTML = html;
             })
             .catch(() => {
